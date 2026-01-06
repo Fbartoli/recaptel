@@ -1,0 +1,32 @@
+{
+  "name": "recaptel",
+  "version": "1.0.0",
+  "description": "Telegram daily digest app - reads your messages and delivers a daily summary",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "login": "tsx src/index.ts login",
+    "ingest": "tsx src/index.ts ingest",
+    "digest": "tsx src/index.ts digest",
+    "send-test": "tsx src/index.ts send-test"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.7.0",
+    "commander": "^12.1.0",
+    "dotenv": "^16.4.7",
+    "node-cron": "^3.0.3",
+    "telegram": "^2.26.16",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.10.5",
+    "@types/node-cron": "^3.0.11",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
+
