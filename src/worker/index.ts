@@ -74,7 +74,7 @@ async function main(): Promise<void> {
 
   console.log("Worker is running with BullMQ. Press Ctrl+C to stop.\n");
   console.log("Jobs:");
-  console.log("  - Ingest: every 30 minutes (for all ready users)");
+  console.log("  - Ingest: every 10 minutes (for all ready users)");
   console.log("  - Digest: every minute check (queues at user's local hour)\n");
 }
 

@@ -12,7 +12,8 @@
     "ingest": "tsx src/index.ts ingest",
     "digest": "tsx src/index.ts digest",
     "send-test": "tsx src/index.ts send-test",
-    "test": "vitest"
+    "test": "vitest",
+    "setup:db": "./scripts/setup-db.sh"
   },
   "dependencies": {
     "better-sqlite3": "^11.7.0",

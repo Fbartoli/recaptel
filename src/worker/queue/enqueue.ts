@@ -14,7 +14,7 @@ interface ReadyUser {
 export async function setupRepeatableJobs(): Promise<void> {
   await ingestQueue.upsertJobScheduler(
     "ingest-scheduler",
-    { pattern: "*/30 * * * *" },
+    { pattern: "*/10 * * * *" },
     {
       name: "scheduled-ingest",
       data: { userId: "__scheduler__" },
@@ -38,7 +38,7 @@ export async function enqueueIngestForAllUsers(db: Database.Database): Promise<n
   let enqueued = 0;
 
   for (const user of users) {
-    const jobId = `ingest:${user.id}`;
+    const jobId = `ingest-${user.id}`;
     
     const existing = await ingestQueue.getJob(jobId);
     if (existing) {
@@ -83,7 +83,7 @@ export async function enqueueDigestsForDueUsers(db: Database.Database): Promise<
       continue;
     }
 
-    const jobId = `digest:${user.id}:${digestDate}`;
+    const jobId = `digest-${user.id}-${digestDate}`;
     
     const existing = await digestQueue.getJob(jobId);
     if (existing) {

@@ -60,7 +60,15 @@ If you change ingest semantics, preserve cursor+uniqueness behavior so re-runnin
 - Web DB defaults to `web/data/recaptel-web.db` (Drizzle/SQLite). Keep it separate from backend DB.
 - Do not import backend `src/` modules into `web/` (and vice versa). Share logic only via explicit duplication or a deliberate extraction to a third package.
 
-## “Don’t touch / don’t commit”
+## Docker Compose invariants
+
+When editing `docker-compose.yml`:
+
+- **Worker MUST be on `public` network**: The worker uses TDLib to communicate with Telegram servers over the internet. Without `public` network, TDLib cannot reach Telegram and auth/ingest will silently fail. NEVER remove `public` from worker's network list.
+- **Redis stays on `internal` only**: Redis should not be exposed to the internet.
+- **Web needs both networks**: `public` for user access, `internal` for Redis/worker communication.
+
+## "Don't touch / don't commit"
 
 - Do not edit generated build output: `dist/` (edit `src/` instead).
 - Do not commit runtime state: `data/`, `web/data/`, `**/*.db*`, TDLib session data.
@@ -72,7 +80,16 @@ If you change ingest semantics, preserve cursor+uniqueness behavior so re-runnin
 - Avoid adding lots of comments; add them only when necessary to protect a subtle invariant.
 - Prefer using absolute paths in tool calls when interacting with the workspace.
 
+## Documentation maintenance
+
+When making changes that affect configuration, environment variables, or user-facing behavior:
+
+- **Update `README.md`** if you add/change commands, environment variables, Docker setup, or monitoring/operational procedures.
+- **Update `.env.example`** if you add, rename, or remove environment variables. Keep it in sync with what the app actually reads.
+- **Update `web/README.md`** for web-specific changes if it exists.
+
+This ensures users and future contributors can onboard without reverse-engineering the code.
+
 ## Git / commits
 
 - Commits should be **signed** (`git commit -S`) or ask the user to do the signed commit.
-

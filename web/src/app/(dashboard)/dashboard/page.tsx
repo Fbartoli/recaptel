@@ -4,7 +4,8 @@ import { digests, users } from "@/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Sparkles, MessageSquare, Clock, ArrowRight } from "lucide-react";
+import { DigestCard } from "@/components/digest-card";
+import { MessageSquare, Clock, ArrowRight } from "lucide-react";
 import Link from "next/link";
 
 export default async function DashboardPage() {
@@ -82,28 +83,13 @@ export default async function DashboardPage() {
 
       <div className="grid gap-4">
         {recentDigests.map((digest) => (
-          <Card key={digest.id} className="border-slate-800 bg-slate-900/50 hover:bg-slate-900/70 transition-colors">
-            <CardHeader className="pb-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-violet-400" />
-                  <CardTitle className="text-base text-white">
-                    {digest.digestDate}
-                  </CardTitle>
-                </div>
-                {digest.messageCount && (
-                  <span className="text-sm text-slate-500">
-                    {digest.messageCount} messages
-                  </span>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent>
-              <p className="text-slate-400 text-sm line-clamp-3">
-                {digest.content.slice(0, 200)}...
-              </p>
-            </CardContent>
-          </Card>
+          <DigestCard
+            key={digest.id}
+            id={digest.id}
+            digestDate={digest.digestDate}
+            content={digest.content}
+            messageCount={digest.messageCount}
+          />
         ))}
       </div>
     </div>

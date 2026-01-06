@@ -5,43 +5,65 @@ services:
       dockerfile: Dockerfile
     ports:
       - "3000:3000"
+    networks:
+      - public
+      - internal
     volumes:
       - web-data:/app/data
     environment:
       - NODE_ENV=production
       - NEXT_TELEMETRY_DISABLED=1
+      - TZ=${TZ:-UTC}
       - REDIS_URL=redis://redis:6379
       - DATABASE_URL=/app/data/recaptel-web.db
-      - AUTH_SECRET=${AUTH_SECRET:?AUTH_SECRET is required}
-      - AUTH_RESEND_KEY=${AUTH_RESEND_KEY}
       - AUTH_EMAIL_FROM=${AUTH_EMAIL_FROM:-RecapTel <onboarding@resend.dev>}
       - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
+      - ADMIN_EMAILS=${ADMIN_EMAILS:-}
+    secrets:
+      - auth_secret
+      - auth_resend_key
     depends_on:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/auth/session').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
     restart: unless-stopped
 
   worker:
     build:
       context: .
       dockerfile: Dockerfile.worker
+    networks:
+      - internal
+      - public
     volumes:
       - web-data:/app/web-data
       - worker-data:/app/data
     environment:
       - NODE_ENV=production
+      - TZ=${TZ:-UTC}
+      - LOG_FORMAT=${LOG_FORMAT:-text}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
       - REDIS_URL=redis://redis:6379
       - WEB_DB_PATH=/app/web-data/recaptel-web.db
       - TDLIB_DATA_DIR=/app/data/tdlib
       - LLM_BASE_URL=${LLM_BASE_URL:-https://openrouter.ai/api/v1}
-      - LLM_API_KEY=${LLM_API_KEY}
       - LLM_MODEL=${LLM_MODEL:-openrouter/auto}
+      - LLM_API_KEY=${LLM_API_KEY}
       - TELEGRAM_API_ID=${TELEGRAM_API_ID}
       - TELEGRAM_API_HASH=${TELEGRAM_API_HASH}
     depends_on:
@@ -50,21 +72,33 @@ services:
       web:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "node", "-e", "require('ioredis').default && process.exit(0)"]
+      test: ["CMD", "node", "dist/worker/healthcheck.js"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1G
     restart: unless-stopped
 
   redis:
     image: redis:7-alpine
+    networks:
+      - internal
     command: >
       redis-server
       --appendonly yes
       --appendfsync everysec
       --maxmemory 256mb
-      --maxmemory-policy allkeys-lru
+      --maxmemory-policy noeviction
     volumes:
       - redis-data:/data
     healthcheck:
@@ -73,9 +107,32 @@ services:
       timeout: 5s
       retries: 5
       start_period: 5s
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 300M
     restart: unless-stopped
+
+networks:
+  public:
+    driver: bridge
+  internal:
+    driver: bridge
+    internal: true
 
 volumes:
   web-data:
   worker-data:
   redis-data:
+
+secrets:
+  auth_secret:
+    environment: AUTH_SECRET
+  auth_resend_key:
+    environment: AUTH_RESEND_KEY

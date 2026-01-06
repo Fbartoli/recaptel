@@ -1,45 +1,49 @@
 import { NextResponse } from "next/server";
-
-interface RateLimitEntry {
-  count: number;
-  resetAt: number;
-}
-
-const store = new Map<string, RateLimitEntry>();
-
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, entry] of store) {
-    if (entry.resetAt < now) {
-      store.delete(key);
-    }
-  }
-}, 60_000);
+import { getRedis } from "./redis";
 
 export interface RateLimitConfig {
   windowMs: number;
   maxRequests: number;
 }
 
-export function checkRateLimit(
+export async function checkRateLimit(
   identifier: string,
   config: RateLimitConfig = { windowMs: 60_000, maxRequests: 10 }
-): { success: boolean; remaining: number; resetAt: number } {
+): Promise<{ success: boolean; remaining: number; resetAt: number }> {
+  const redis = getRedis();
+  const key = `ratelimit:${identifier}`;
   const now = Date.now();
-  const entry = store.get(identifier);
+  const windowSec = Math.ceil(config.windowMs / 1000);
 
-  if (!entry || entry.resetAt < now) {
-    const resetAt = now + config.windowMs;
-    store.set(identifier, { count: 1, resetAt });
-    return { success: true, remaining: config.maxRequests - 1, resetAt };
+  try {
+    const multi = redis.multi();
+    multi.incr(key);
+    multi.pttl(key);
+    const results = await multi.exec();
+
+    if (!results) {
+      return { success: true, remaining: config.maxRequests - 1, resetAt: now + config.windowMs };
+    }
+
+    const count = results[0]?.[1] as number;
+    const ttl = results[1]?.[1] as number;
+
+    if (ttl === -1 || ttl === -2) {
+      await redis.expire(key, windowSec);
+    }
+
+    const resetAt = ttl > 0 ? now + ttl : now + config.windowMs;
+    const remaining = Math.max(0, config.maxRequests - count);
+
+    if (count > config.maxRequests) {
+      return { success: false, remaining: 0, resetAt };
+    }
+
+    return { success: true, remaining, resetAt };
+  } catch (err) {
+    console.error("[RateLimit] Redis error, allowing request:", err);
+    return { success: true, remaining: config.maxRequests - 1, resetAt: now + config.windowMs };
   }
-
-  if (entry.count >= config.maxRequests) {
-    return { success: false, remaining: 0, resetAt: entry.resetAt };
-  }
-
-  entry.count++;
-  return { success: true, remaining: config.maxRequests - entry.count, resetAt: entry.resetAt };
 }
 
 export function rateLimitResponse(resetAt: number): NextResponse {
@@ -61,4 +65,3 @@ export function getRateLimitIdentifier(request: Request, userId?: string): strin
   const ip = forwarded?.split(",")[0]?.trim() || "unknown";
   return userId ? `user:${userId}` : `ip:${ip}`;
 }
-

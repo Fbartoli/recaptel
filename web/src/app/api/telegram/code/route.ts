@@ -18,7 +18,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const rateLimit = checkRateLimit(`telegram:code:${session.user.id}`, { windowMs: 60_000, maxRequests: 5 });
+  const rateLimit = await checkRateLimit(`telegram:code:${session.user.id}`, { windowMs: 60_000, maxRequests: 5 });
   if (!rateLimit.success) {
     return rateLimitResponse(rateLimit.resetAt);
   }

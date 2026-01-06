@@ -8,8 +8,10 @@ import {
   sessions,
   verificationTokens,
 } from "@/db/schema";
+import { getAuthSecret, getResendKey } from "@/lib/secrets";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  secret: getAuthSecret(),
   adapter: DrizzleAdapter(db, {
     usersTable: users,
     accountsTable: accounts,
@@ -19,8 +21,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
   providers: [
     Resend({
-      // Default: Resend test sender (works without domain verification)
-      // For production: set AUTH_EMAIL_FROM and verify domain at https://resend.com/domains
+      apiKey: getResendKey(),
       from: process.env.AUTH_EMAIL_FROM || "RecapTel <onboarding@resend.dev>",
     }),
   ],

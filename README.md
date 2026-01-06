@@ -236,12 +236,21 @@ cp .env.example .env
 # Start all services
 docker compose up -d
 
+# Initialize the database (first time only)
+npm run setup:db
+# Or run the script directly: ./scripts/setup-db.sh
+
 # Check service health
 docker compose ps
 
 # View logs
 docker compose logs -f
 ```
+
+**Database setup**: The `npm run setup:db` script ensures the database schema is correctly initialized. It:
+- Uses Drizzle if `web/node_modules` exists (for development)
+- Falls back to the bundled `sql/init-web.sql` for Docker-only deployments
+- Is idempotent — safe to run multiple times
 
 Services:
 - **web**: Next.js web UI for user registration and Telegram connection
@@ -316,6 +325,51 @@ docker compose exec redis redis-cli LLEN bull:recaptel-ingest:failed
 
 # Completed jobs
 docker compose exec redis redis-cli LLEN bull:recaptel-ingest:completed
+```
+
+### Admin Dashboard
+
+Access the admin dashboard at `/admin` (requires `ADMIN_EMAILS` env to be set):
+
+```bash
+# Set admin emails (comma-separated)
+ADMIN_EMAILS=admin@example.com,other@example.com
+```
+
+The dashboard shows:
+- User stats (connection status, last ingest/digest times)
+- Queue health (pending, active, failed, completed jobs)
+- Total message and digest counts
+
+## Backups
+
+### Creating Backups
+
+```bash
+# Run the backup script
+chmod +x scripts/backup.sh
+./scripts/backup.sh
+
+# Backups are saved to ./backups/ with timestamps
+```
+
+### Restoring from Backup
+
+```bash
+# List available backups
+./scripts/restore.sh
+
+# Restore from a specific timestamp
+./scripts/restore.sh 20260106_120000
+```
+
+### Automated Backups
+
+Add to crontab for daily backups:
+
+```bash
+# Daily backup at 3am
+0 3 * * * cd /path/to/recaptel && ./scripts/backup.sh >> /var/log/recaptel-backup.log 2>&1
 ```
 
 ## Privacy & Security

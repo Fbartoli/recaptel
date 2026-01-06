@@ -12,7 +12,7 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const rateLimit = checkRateLimit(`telegram:status:${session.user.id}`, { windowMs: 60_000, maxRequests: 60 });
+  const rateLimit = await checkRateLimit(`telegram:status:${session.user.id}`, { windowMs: 60_000, maxRequests: 60 });
   if (!rateLimit.success) {
     return rateLimitResponse(rateLimit.resetAt);
   }

@@ -1,10 +1,56 @@
 import type { Config } from "../config.js";
 import { fetchWithRetry } from "../utils/fetchRetry.js";
 
-const MARKDOWNV2_SPECIAL_CHARS = /([_*\[\]()~`>#+\-=|{}.!\\])/g;
+export function formatForTelegram(text: string): string {
+  let result = text;
+  
+  // Convert ## and ### headers to bold
+  result = result.replace(/^###\s+(.+)$/gm, "*$1*");
+  result = result.replace(/^##\s+(.+)$/gm, "*$1*");
+  result = result.replace(/^#\s+(.+)$/gm, "*$1*");
+  
+  // Convert **text** to *text* (Telegram uses single * for bold)
+  result = result.replace(/\*\*(.+?)\*\*/g, "*$1*");
+  
+  // Escape MarkdownV2 special characters
+  const escapeChars = (str: string): string => {
+    return str
+      .replace(/\\/g, "\\\\")
+      .replace(/_/g, "\\_")
+      .replace(/\[/g, "\\[")
+      .replace(/\]/g, "\\]")
+      .replace(/\(/g, "\\(")
+      .replace(/\)/g, "\\)")
+      .replace(/~/g, "\\~")
+      .replace(/`/g, "\\`")
+      .replace(/>/g, "\\>")
+      .replace(/</g, "\\<")
+      .replace(/#/g, "\\#")
+      .replace(/\+/g, "\\+")
+      .replace(/-/g, "\\-")
+      .replace(/=/g, "\\=")
+      .replace(/\|/g, "\\|")
+      .replace(/\{/g, "\\{")
+      .replace(/\}/g, "\\}")
+      .replace(/\./g, "\\.")
+      .replace(/!/g, "\\!");
+  };
+  
+  // Split by bold markers and escape content between them
+  const parts = result.split(/(\*[^*]+\*)/g);
+  result = parts.map((part) => {
+    if (part.startsWith("*") && part.endsWith("*") && part.length > 2) {
+      const inner = part.slice(1, -1);
+      return "*" + escapeChars(inner) + "*";
+    }
+    return escapeChars(part);
+  }).join("");
+  
+  return result;
+}
 
 export function escapeMarkdownV2(text: string): string {
-  return text.replace(MARKDOWNV2_SPECIAL_CHARS, "\\$1");
+  return formatForTelegram(text);
 }
 
 async function sendTelegramMessage(

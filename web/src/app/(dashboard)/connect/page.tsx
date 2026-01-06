@@ -197,10 +197,17 @@ export default function ConnectPage() {
                 placeholder="+1234567890"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                className="bg-slate-800/50 border-slate-700 text-white"
+                className="bg-slate-800/50 border-slate-700 text-white disabled:opacity-50"
+                disabled={isLoading}
                 required
               />
             </div>
+            {isLoading && (
+              <div className="flex items-center gap-2 text-sm text-violet-400">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Sending verification code to Telegram...</span>
+              </div>
+            )}
             <Button
               type="submit"
               disabled={isLoading || !phone}
@@ -231,11 +238,18 @@ export default function ConnectPage() {
                 placeholder="12345"
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
-                className="bg-slate-800/50 border-slate-700 text-white text-center text-2xl tracking-widest"
+                className="bg-slate-800/50 border-slate-700 text-white text-center text-2xl tracking-widest disabled:opacity-50"
                 maxLength={10}
+                disabled={isLoading}
                 required
               />
             </div>
+            {isLoading && (
+              <div className="flex items-center gap-2 text-sm text-violet-400">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Verifying code...</span>
+              </div>
+            )}
             <Button
               type="submit"
               disabled={isLoading || !code}
@@ -266,10 +280,17 @@ export default function ConnectPage() {
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="bg-slate-800/50 border-slate-700 text-white"
+                className="bg-slate-800/50 border-slate-700 text-white disabled:opacity-50"
+                disabled={isLoading}
                 required
               />
             </div>
+            {isLoading && (
+              <div className="flex items-center gap-2 text-sm text-violet-400">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Authenticating...</span>
+              </div>
+            )}
             <Button
               type="submit"
               disabled={isLoading || !password}
