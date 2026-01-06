@@ -1,33 +1,22 @@
+import { DateTime } from "luxon";
 import type { Config } from "../config.js";
 import { initDb } from "../db/schema.js";
 import { getMessagesInRange, saveDigest } from "../db/queries.js";
 import { chatCompletion } from "../llm/client.js";
 
-function getDigestTimeRange(config: Config): { start: number; end: number; dateStr: string } {
-  const now = new Date();
+export function getDigestTimeRange(config: Config): { start: number; end: number; dateStr: string } {
+  const nowInZone = DateTime.now().setZone(config.timezone);
+  const todayMidnight = nowInZone.startOf("day");
+  const yesterdayMidnight = todayMidnight.minus({ days: 1 });
 
-  const formatter = new Intl.DateTimeFormat("en-CA", {
-    timeZone: config.timezone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
+  const start = Math.floor(yesterdayMidnight.toSeconds());
+  const end = Math.floor(todayMidnight.toSeconds());
+  const dateStr = yesterdayMidnight.toFormat("yyyy-MM-dd");
 
-  const todayStr = formatter.format(now);
-  const todayLocal = new Date(`${todayStr}T00:00:00`);
-
-  const yesterdayLocal = new Date(todayLocal);
-  yesterdayLocal.setDate(yesterdayLocal.getDate() - 1);
-
-  const yesterdayStr = formatter.format(yesterdayLocal);
-
-  const start = Math.floor(yesterdayLocal.getTime() / 1000);
-  const end = Math.floor(todayLocal.getTime() / 1000);
-
-  return { start, end, dateStr: yesterdayStr };
+  return { start, end, dateStr };
 }
 
-interface GroupedMessages {
+export interface GroupedMessages {
   [chatTitle: string]: {
     chatId: string;
     messages: {
@@ -38,7 +27,7 @@ interface GroupedMessages {
   };
 }
 
-function groupMessagesByChat(
+export function groupMessagesByChat(
   messages: Awaited<ReturnType<typeof getMessagesInRange>>
 ): GroupedMessages {
   const grouped: GroupedMessages = {};
@@ -66,7 +55,7 @@ function groupMessagesByChat(
   return grouped;
 }
 
-function buildPromptContent(grouped: GroupedMessages, dateStr: string): string {
+export function buildPromptContent(grouped: GroupedMessages, dateStr: string): string {
   let content = `Here are my Telegram messages from ${dateStr}. Please provide:\n`;
   content += `1. A brief summary of each conversation/chat\n`;
   content += `2. Any action items or follow-ups I should do\n`;
@@ -99,18 +88,19 @@ Format your response as a clear, scannable digest with sections for:
 
 Be concise but don't miss important details. Use markdown formatting.`;
 
-export async function runDigest(config: Config): Promise<string> {
+export async function runDigest(config: Config, userId: string = "default"): Promise<string> {
   const db = initDb(config.dbPath);
   const { start, end, dateStr } = getDigestTimeRange(config);
 
-  console.log(`Generating digest for ${dateStr}...`);
+  console.log(`Generating digest for ${dateStr} (user: ${userId})...`);
   console.log(`Time range: ${new Date(start * 1000).toISOString()} to ${new Date(end * 1000).toISOString()}`);
 
-  const messages = getMessagesInRange(db, start, end);
+  const messages = getMessagesInRange(db, userId, start, end);
 
   if (messages.length === 0) {
     const noMessagesDigest = `# Daily Digest for ${dateStr}\n\nNo messages received during this period.`;
     saveDigest(db, {
+      user_id: userId,
       digest_date: dateStr,
       content: noMessagesDigest,
       message_count: 0,
@@ -132,6 +122,7 @@ export async function runDigest(config: Config): Promise<string> {
   const fullDigest = `# Daily Digest for ${dateStr}\n\n${digestContent}`;
 
   saveDigest(db, {
+    user_id: userId,
     digest_date: dateStr,
     content: fullDigest,
     message_count: messages.length,
@@ -140,4 +131,3 @@ export async function runDigest(config: Config): Promise<string> {
 
   return fullDigest;
 }
-

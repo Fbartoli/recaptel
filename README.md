@@ -4,20 +4,21 @@ Telegram daily digest app — reads your messages and delivers a daily summary v
 
 ## Features
 
-- Connects to your Telegram **user account** (not just a bot) to read all your chats
+- Connects to your Telegram **user account** via official TDLib to read all your chats
 - Incrementally ingests messages with per-chat cursors (no duplicates)
-- Generates a daily digest using an LLM (OpenAI-compatible API)
+- Generates a daily digest using an LLM (OpenRouter/Claude by default, OpenAI-compatible)
 - Delivers the digest to you via Telegram bot message
 - Configurable chat allow/block lists for privacy control
+- Multi-user support for SaaS deployments
 - Runs on a schedule (every 30min ingest, daily digest)
 
 ## Prerequisites
 
-- Node.js 18+
+- Node.js 20+
 - A Telegram account
 - Telegram API credentials (see below)
 - A Telegram bot (for sending digests)
-- An LLM API key (OpenAI or compatible)
+- An LLM API key (OpenRouter recommended, or any OpenAI-compatible provider)
 
 ## Getting Telegram Credentials
 
@@ -56,21 +57,22 @@ cp .env.example .env
 Create a `.env` file with:
 
 ```bash
-# Telegram user account (GramJS / MTProto)
+# Telegram API credentials (from my.telegram.org)
 TELEGRAM_API_ID=12345678
-TELEGRAM_API_HASH=abcdef1234567890abcdef1234567890
-
-# GramJS session string (generated after first login)
-TELEGRAM_SESSION=
+TELEGRAM_API_HASH=your_api_hash_here
 
 # Telegram Bot for sending digests
-TELEGRAM_BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrsTUVwxyz
-TELEGRAM_DIGEST_CHAT_ID=123456789
+TELEGRAM_BOT_TOKEN=PASTE_BOT_TOKEN_HERE
+TELEGRAM_DIGEST_CHAT_ID=PASTE_CHAT_ID_HERE
 
-# LLM API (OpenAI-compatible)
-LLM_BASE_URL=https://api.openai.com/v1
-LLM_API_KEY=sk-...
-LLM_MODEL=gpt-4o-mini
+# LLM API (OpenRouter by default, works with Claude and many models)
+LLM_BASE_URL=https://openrouter.ai/api/v1
+LLM_API_KEY=PASTE_OPENROUTER_API_KEY_HERE
+LLM_MODEL=openrouter/auto
+
+# Optional OpenRouter headers (for attribution/analytics)
+# OPENROUTER_SITE_URL=https://your-site.com
+# OPENROUTER_APP_NAME=RecapTel
 
 # Timezone and digest schedule
 TIMEZONE=UTC
@@ -81,38 +83,92 @@ CHAT_ALLOWLIST=
 
 # Optional: comma-separated chat IDs to exclude
 CHAT_BLOCKLIST=
+
+# Optional: ingest limits (tune for large accounts)
+INGEST_DIALOG_LIMIT=500
+INGEST_MESSAGES_PER_CHAT=500
+
+# Optional: storage paths (defaults shown)
+DB_PATH=data/recaptel.db
+TDLIB_DATA_DIR=data/tdlib
+```
+
+## LLM Provider: OpenRouter
+
+RecapTel uses [OpenRouter](https://openrouter.ai) by default, which provides access to Claude, GPT-4, and many other models through a single API.
+
+1. Create an account at https://openrouter.ai
+2. Get your API key from https://openrouter.ai/keys
+3. Set `LLM_API_KEY` in your `.env` to your OpenRouter key
+
+The default model `openrouter/auto` lets OpenRouter pick the best model for each request. You can also specify a model directly:
+
+- `anthropic/claude-3.5-sonnet` — Claude 3.5 Sonnet (recommended)
+- `anthropic/claude-3.5-haiku` — Claude 3.5 Haiku (faster/cheaper)
+- `openai/gpt-4o-mini` — GPT-4o Mini
+- See all models at https://openrouter.ai/models
+
+### Using other providers
+
+RecapTel works with any OpenAI-compatible API. To use OpenAI directly:
+
+```bash
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_API_KEY=sk-...
+LLM_MODEL=gpt-4o-mini
 ```
 
 ## First Run — Login
 
-Before the app can read messages, you need to authenticate with Telegram:
+Before the app can read messages, you need to authenticate with Telegram via TDLib:
 
 ```bash
 npm run login
 ```
 
 This will:
-1. Ask for your phone number
+1. Ask for your phone number (with country code)
 2. Send you a code on Telegram
 3. Ask for the code (and 2FA password if enabled)
-4. Save the session to `data/session.txt`
+4. Save TDLib session data to `data/tdlib/default/`
 
-After login, you can also copy the session string to `TELEGRAM_SESSION` in `.env` for portability.
+### Multi-user mode
+
+For multi-user deployments, specify a user ID:
+
+```bash
+npm run login -- -u user123
+npm run ingest -- -u user123
+npm run digest -- -u user123
+```
+
+Each user gets their own TDLib data directory under `data/tdlib/<userId>/`.
 
 ## Commands
 
 ```bash
 # Login to Telegram (first time setup)
 npm run login
+npm run login -- -u <userId>    # multi-user
+
+# Check auth status
+npx tsx src/index.ts auth-status
+npx tsx src/index.ts auth-status -u <userId>
+
+# Logout
+npx tsx src/index.ts logout
+npx tsx src/index.ts logout -u <userId>
 
 # Fetch new messages from all chats
 npm run ingest
+npm run ingest -- -u <userId>   # multi-user
 
 # Fetch messages without storing (see what would be ingested)
 npm run ingest -- --dry-run
 
 # Generate and send daily digest
 npm run digest
+npm run digest -- -u <userId>   # multi-user
 
 # Generate digest without sending
 npm run digest -- --dry-run
@@ -122,7 +178,6 @@ npm run send-test
 
 # Run the scheduler (continuous operation)
 npm start
-# or
 npm run dev  # with tsx for development
 ```
 
@@ -179,19 +234,24 @@ docker run -d --name recaptel \
   recaptel
 ```
 
+The Docker image includes prebuilt TDLib binaries. The `/app/data` volume persists:
+- SQLite database (`recaptel.db`)
+- TDLib session data (`tdlib/<userId>/`)
+
 ## Privacy & Security
 
 - Messages are stored locally in SQLite (`data/recaptel.db`)
 - Only message metadata + text is stored (no media files)
+- TDLib session data is stored per-user in `data/tdlib/<userId>/`
 - Use `CHAT_BLOCKLIST` to exclude sensitive chats
 - Keep your `.env` and `data/` directory secure
-- The session file grants full access to your Telegram account
+- TDLib session files grant access to the user's Telegram account
 
 ## Troubleshooting
 
-### "No session found"
+### "User is not logged in"
 
-Run `npm run login` first.
+Run `npm run login` first (or `npm run login -- -u <userId>` for multi-user).
 
 ### Bot can't send messages
 
@@ -199,11 +259,10 @@ Run `npm run login` first.
 2. Verify `TELEGRAM_DIGEST_CHAT_ID` is your user ID (not the bot's ID)
 3. Run `npm run send-test` to debug
 
-### Rate limits
+### Rate limits / Flood waits
 
-Telegram has rate limits. The ingest process is designed to be gentle, but if you have many chats, initial ingest may be slow.
+TDLib handles flood waits automatically. If you have many chats, initial ingest may be slow. Consider reducing `INGEST_DIALOG_LIMIT` and `INGEST_MESSAGES_PER_CHAT` for the first run.
 
 ## License
 
 MIT
-

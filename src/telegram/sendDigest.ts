@@ -1,22 +1,31 @@
 import type { Config } from "../config.js";
+import { fetchWithRetry } from "../utils/fetchRetry.js";
 
 async function sendTelegramMessage(
   botToken: string,
   chatId: string,
   text: string,
-  parseMode: "Markdown" | "HTML" = "Markdown"
+  parseMode?: "Markdown" | "HTML"
 ): Promise<void> {
   const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
 
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      chat_id: chatId,
-      text,
-      parse_mode: parseMode,
-    }),
-  });
+  const body: Record<string, unknown> = {
+    chat_id: chatId,
+    text,
+  };
+  if (parseMode) {
+    body.parse_mode = parseMode;
+  }
+
+  const response = await fetchWithRetry(
+    url,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+    { timeoutMs: 30000, maxRetries: 3 }
+  );
 
   if (!response.ok) {
     const errorData = await response.json();
@@ -24,7 +33,7 @@ async function sendTelegramMessage(
   }
 }
 
-function splitMessage(text: string, maxLength: number = 4000): string[] {
+export function splitMessage(text: string, maxLength: number = 4000): string[] {
   if (text.length <= maxLength) return [text];
 
   const parts: string[] = [];
@@ -54,17 +63,25 @@ function splitMessage(text: string, maxLength: number = 4000): string[] {
   return parts;
 }
 
+async function sendWithFallback(botToken: string, chatId: string, text: string): Promise<void> {
+  try {
+    await sendTelegramMessage(botToken, chatId, text, "Markdown");
+  } catch {
+    try {
+      await sendTelegramMessage(botToken, chatId, text, "HTML");
+    } catch {
+      await sendTelegramMessage(botToken, chatId, text);
+    }
+  }
+}
+
 export async function sendDigest(config: Config, digestText: string): Promise<void> {
   const parts = splitMessage(digestText);
 
   for (let i = 0; i < parts.length; i++) {
     const part = parts.length > 1 ? `(${i + 1}/${parts.length})\n\n${parts[i]}` : parts[i];
 
-    try {
-      await sendTelegramMessage(config.telegramBotToken, config.telegramDigestChatId, part);
-    } catch {
-      await sendTelegramMessage(config.telegramBotToken, config.telegramDigestChatId, part, "HTML");
-    }
+    await sendWithFallback(config.telegramBotToken, config.telegramDigestChatId, part);
 
     if (i < parts.length - 1) {
       await new Promise((resolve) => setTimeout(resolve, 500));
@@ -77,4 +94,5 @@ export async function sendTestMessage(config: Config): Promise<void> {
 
   await sendTelegramMessage(config.telegramBotToken, config.telegramDigestChatId, testMessage);
 }
+
 

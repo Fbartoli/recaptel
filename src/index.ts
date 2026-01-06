@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 import { Command } from "commander";
-import { getConfig, getConfigSafe } from "./config.js";
-import { runLogin } from "./telegram/gramjsClient.js";
-import { runIngest } from "./telegram/ingest.js";
+import { getConfig } from "./config.js";
+import { runTdlibLogin, checkAuthStatus, logoutUser } from "./telegram/tdlib/auth.js";
+import { runIngest } from "./telegram/tdlib/ingest.js";
 import { runDigest } from "./digest/buildPrompt.js";
 import { sendTestMessage, sendDigest } from "./telegram/sendDigest.js";
 import { startScheduler } from "./scheduler/cron.js";
@@ -16,28 +16,50 @@ program
 
 program
   .command("login")
-  .description("Interactively login to Telegram and save session")
-  .action(async () => {
+  .description("Interactively login to Telegram via TDLib")
+  .option("-u, --user <userId>", "User ID for multi-user mode", "default")
+  .action(async (opts) => {
     const config = getConfig();
-    await runLogin(config);
+    await runTdlibLogin(config, opts.user);
+  });
+
+program
+  .command("auth-status")
+  .description("Check TDLib authorization status")
+  .option("-u, --user <userId>", "User ID for multi-user mode", "default")
+  .action(async (opts) => {
+    const config = getConfig();
+    const state = await checkAuthStatus(config, opts.user);
+    console.log(`Auth state for user '${opts.user}': ${state}`);
+  });
+
+program
+  .command("logout")
+  .description("Logout from Telegram")
+  .option("-u, --user <userId>", "User ID for multi-user mode", "default")
+  .action(async (opts) => {
+    const config = getConfig();
+    await logoutUser(config, opts.user);
   });
 
 program
   .command("ingest")
   .description("Fetch new messages from Telegram")
   .option("--dry-run", "Print discovered chats without storing")
+  .option("-u, --user <userId>", "User ID for multi-user mode", "default")
   .action(async (opts) => {
     const config = getConfig();
-    await runIngest(config, { dryRun: opts.dryRun });
+    await runIngest(config, opts.user, { dryRun: opts.dryRun });
   });
 
 program
   .command("digest")
   .description("Generate daily digest from stored messages")
   .option("--dry-run", "Print digest without sending")
+  .option("-u, --user <userId>", "User ID for multi-user mode", "default")
   .action(async (opts) => {
     const config = getConfig();
-    const digestText = await runDigest(config);
+    const digestText = await runDigest(config, opts.user);
     if (opts.dryRun) {
       console.log("\n--- DIGEST (dry run) ---\n");
       console.log(digestText);
@@ -59,10 +81,10 @@ program
 program
   .command("run")
   .description("Run the scheduler (ingest + digest on schedule)")
-  .action(async () => {
+  .option("-u, --user <userId>", "User ID for multi-user mode", "default")
+  .action(async (opts) => {
     const config = getConfig();
-    startScheduler(config);
+    startScheduler(config, opts.user);
   });
 
 program.parse();
-

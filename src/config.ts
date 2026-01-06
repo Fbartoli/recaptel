@@ -3,7 +3,7 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-const parseCommaSeparated = (val: string | undefined): string[] => {
+export const parseCommaSeparated = (val: string | undefined): string[] => {
   if (!val || val.trim() === "") return [];
   return val.split(",").map((s) => s.trim()).filter(Boolean);
 };
@@ -11,14 +11,16 @@ const parseCommaSeparated = (val: string | undefined): string[] => {
 const configSchema = z.object({
   telegramApiId: z.coerce.number().int().positive(),
   telegramApiHash: z.string().min(1),
-  telegramSession: z.string().optional(),
 
   telegramBotToken: z.string().min(1),
   telegramDigestChatId: z.string().min(1),
 
-  llmBaseUrl: z.string().url().default("https://api.openai.com/v1"),
+  llmBaseUrl: z.string().url().default("https://openrouter.ai/api/v1"),
   llmApiKey: z.string().min(1),
-  llmModel: z.string().default("gpt-4o-mini"),
+  llmModel: z.string().default("openrouter/auto"),
+
+  openrouterSiteUrl: z.string().url().optional(),
+  openrouterAppName: z.string().optional(),
 
   timezone: z.string().default("UTC"),
   digestHourLocal: z.coerce.number().int().min(0).max(23).default(9),
@@ -26,8 +28,11 @@ const configSchema = z.object({
   chatAllowlist: z.array(z.string()).default([]),
   chatBlocklist: z.array(z.string()).default([]),
 
+  ingestDialogLimit: z.coerce.number().int().min(1).default(500),
+  ingestMessagesPerChat: z.coerce.number().int().min(1).default(500),
+
   dbPath: z.string().default("data/recaptel.db"),
-  sessionPath: z.string().default("data/session.txt"),
+  tdlibDataDir: z.string().default("data/tdlib"),
 });
 
 export type Config = z.infer<typeof configSchema>;
@@ -36,7 +41,6 @@ function loadConfig(): Config {
   const raw = {
     telegramApiId: process.env.TELEGRAM_API_ID,
     telegramApiHash: process.env.TELEGRAM_API_HASH,
-    telegramSession: process.env.TELEGRAM_SESSION,
 
     telegramBotToken: process.env.TELEGRAM_BOT_TOKEN,
     telegramDigestChatId: process.env.TELEGRAM_DIGEST_CHAT_ID,
@@ -45,14 +49,20 @@ function loadConfig(): Config {
     llmApiKey: process.env.LLM_API_KEY,
     llmModel: process.env.LLM_MODEL,
 
+    openrouterSiteUrl: process.env.OPENROUTER_SITE_URL || undefined,
+    openrouterAppName: process.env.OPENROUTER_APP_NAME || undefined,
+
     timezone: process.env.TIMEZONE,
     digestHourLocal: process.env.DIGEST_HOUR_LOCAL,
 
     chatAllowlist: parseCommaSeparated(process.env.CHAT_ALLOWLIST),
     chatBlocklist: parseCommaSeparated(process.env.CHAT_BLOCKLIST),
 
+    ingestDialogLimit: process.env.INGEST_DIALOG_LIMIT,
+    ingestMessagesPerChat: process.env.INGEST_MESSAGES_PER_CHAT,
+
     dbPath: process.env.DB_PATH,
-    sessionPath: process.env.SESSION_PATH,
+    tdlibDataDir: process.env.TDLIB_DATA_DIR,
   };
 
   return configSchema.parse(raw);
@@ -74,4 +84,5 @@ export function getConfigSafe(): Config | null {
     return null;
   }
 }
+
 

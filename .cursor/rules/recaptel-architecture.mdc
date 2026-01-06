@@ -1,0 +1,78 @@
+---
+description: "RecapTel architecture + workflow invariants (prevent drift)"
+globs:
+  - "**/*"
+alwaysApply: true
+---
+
+## Repo shape (two apps)
+
+- **Backend (root)**: TypeScript CLI/scheduler in `src/`, compiled output in `dist/`.
+- **Web (subdir)**: Next.js app in `web/` with its own deps, DB, and workflows.
+
+Do not blur these boundaries. Changes to one app should not require importing code from the other.
+
+## Backend: how it works (source of truth = `src/`)
+
+### Entry points / commands
+
+- CLI is defined in `src/index.ts` (commander commands: `login`, `auth-status`, `logout`, `ingest`, `digest`, `send-test`, `run`).
+- Operational docs/commands live in `README.md`. Prefer updating docs there if behavior changes.
+
+### Data model and invariants (SQLite)
+
+The backend stores state locally in SQLite at `DB_PATH` (default `data/recaptel.db`).
+
+Key invariants:
+- **Idempotent ingest** is enforced by:
+  - `messages` has `UNIQUE(user_id, chat_id, message_id)`
+  - `insertMessage()` uses `INSERT OR IGNORE`
+  - per-chat cursor table `cursors(user_id, chat_id, last_message_id)` tracks progress
+- **Multi-user safety**: nearly all tables are keyed by `user_id`; never remove or bypass `user_id` scoping.
+
+If you change ingest semantics, preserve cursor+uniqueness behavior so re-running ingest does not duplicate messages.
+
+### Telegram read path (TDLib)
+
+- Reading messages uses TDLib via `src/telegram/tdlib/*`.
+- Runtime session/state is stored under `data/tdlib/<userId>/` (do not commit it; it grants account access).
+- `CHAT_ALLOWLIST` / `CHAT_BLOCKLIST` gate which chats are ingested; preserve the privacy intent of these knobs.
+
+### Digest generation
+
+- Digest time window is computed in `src/digest/buildPrompt.ts` using `TIMEZONE` and daily boundaries.
+- LLM calls are OpenAI-compatible (`/chat/completions`) via `src/llm/client.ts`.
+- Digests are persisted in `digests` table keyed by `(user_id, digest_date)`.
+
+### Digest delivery (Telegram bot)
+
+- Delivery uses Telegram Bot API (`src/telegram/sendDigest.ts`).
+- Keep message splitting (Telegram length limits) and parse-mode fallback behavior intact.
+
+### Scheduler
+
+- `src/scheduler/cron.ts` runs ingest every 30 minutes and digest daily at `DIGEST_HOUR_LOCAL` in `TIMEZONE`.
+- Any scheduler change must preserve timezone correctness and avoid double-sending.
+
+## Web app (`web/`) invariants
+
+- Web is a separate Next.js project; treat `web/package.json` + `web/README.md` as the source of truth for workflows.
+- Web DB defaults to `web/data/recaptel-web.db` (Drizzle/SQLite). Keep it separate from backend DB.
+- Do not import backend `src/` modules into `web/` (and vice versa). Share logic only via explicit duplication or a deliberate extraction to a third package.
+
+## “Don’t touch / don’t commit”
+
+- Do not edit generated build output: `dist/` (edit `src/` instead).
+- Do not commit runtime state: `data/`, `web/data/`, `**/*.db*`, TDLib session data.
+- Do not introduce secrets into the repo; keep credentials in `.env` files.
+
+## Coding conventions for this repo
+
+- Prefer **small, surgical changes** that preserve existing behavior and invariants.
+- Avoid adding lots of comments; add them only when necessary to protect a subtle invariant.
+- Prefer using absolute paths in tool calls when interacting with the workspace.
+
+## Git / commits
+
+- Commits should be **signed** (`git commit -S`) or ask the user to do the signed commit.
+
