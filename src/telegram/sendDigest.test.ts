@@ -1,5 +1,32 @@
 import { describe, it, expect } from "vitest";
-import { splitMessage } from "./sendDigest.js";
+import { splitMessage, escapeMarkdownV2 } from "./sendDigest.js";
+
+describe("escapeMarkdownV2", () => {
+  it("escapes all MarkdownV2 special characters", () => {
+    const input = "_*[]()~`>#+-=|{}.!\\";
+    const expected = "\\_\\*\\[\\]\\(\\)\\~\\`\\>\\#\\+\\-\\=\\|\\{\\}\\.\\!\\\\";
+    expect(escapeMarkdownV2(input)).toBe(expected);
+  });
+
+  it("leaves regular text unchanged", () => {
+    const input = "Hello world";
+    expect(escapeMarkdownV2(input)).toBe("Hello world");
+  });
+
+  it("escapes special chars embedded in text", () => {
+    const input = "Check this: 2+2=4!";
+    expect(escapeMarkdownV2(input)).toBe("Check this: 2\\+2\\=4\\!");
+  });
+
+  it("handles empty string", () => {
+    expect(escapeMarkdownV2("")).toBe("");
+  });
+
+  it("escapes ISO date format correctly", () => {
+    const input = "2024-01-15T10:30:00.000Z";
+    expect(escapeMarkdownV2(input)).toBe("2024\\-01\\-15T10:30:00\\.000Z");
+  });
+});
 
 describe("splitMessage", () => {
   it("returns single part for short message", () => {

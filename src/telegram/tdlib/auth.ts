@@ -74,7 +74,7 @@ export async function runTdlibLogin(config: Config, userId: string): Promise<voi
 
   if (state === "authorizationStateReady") {
     console.log("\nLogin successful!");
-    console.log(`TDLib data stored in: data/tdlib/${userId}/`);
+    console.log(`TDLib data stored in: ${config.tdlibDataDir}/${userId}/`);
   } else {
     console.error(`Unexpected auth state: ${state}`);
   }

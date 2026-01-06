@@ -9,6 +9,8 @@ import {
 import type { AdapterAccountType } from "next-auth/adapters";
 
 // NextAuth required tables
+export type TelegramAuthState = "disconnected" | "awaiting_phone" | "awaiting_code" | "awaiting_password" | "ready";
+
 export const users = sqliteTable("users", {
   id: text("id")
     .primaryKey()
@@ -22,6 +24,9 @@ export const users = sqliteTable("users", {
   telegramBotToken: text("telegram_bot_token"),
   telegramChatId: text("telegram_chat_id"),
   telegramConnectedAt: integer("telegram_connected_at", { mode: "timestamp" }),
+  telegramAuthState: text("telegram_auth_state").$type<TelegramAuthState>().default("disconnected"),
+  lastIngestAt: integer("last_ingest_at", { mode: "timestamp" }),
+  lastDigestAt: integer("last_digest_at", { mode: "timestamp" }),
   subscriptionTier: text("subscription_tier").default("free"),
   createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
   updatedAt: integer("updated_at", { mode: "timestamp" }).$defaultFn(() => new Date()),

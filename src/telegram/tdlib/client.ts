@@ -31,8 +31,19 @@ function ensureDir(dir: string): void {
   }
 }
 
-export function getTdlibDataDir(baseDataDir: string, userId: string): string {
-  return join(baseDataDir, "tdlib", userId);
+const VALID_USER_ID_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
+
+export function validateUserId(userId: string): void {
+  if (!VALID_USER_ID_PATTERN.test(userId)) {
+    throw new Error(
+      `Invalid userId "${userId}": must be 1-64 alphanumeric characters, underscores, or hyphens`
+    );
+  }
+}
+
+export function getTdlibDataDir(tdlibDataDir: string, userId: string): string {
+  validateUserId(userId);
+  return join(tdlibDataDir, userId);
 }
 
 let configured = false;
@@ -41,7 +52,7 @@ export async function createTdlibClient(
   config: Config,
   userId: string
 ): Promise<TdlibClientWrapper> {
-  const dataDir = getTdlibDataDir(join(process.cwd(), "data"), userId);
+  const dataDir = getTdlibDataDir(config.tdlibDataDir, userId);
   ensureDir(dataDir);
 
   if (!configured) {

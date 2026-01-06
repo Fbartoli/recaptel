@@ -1,0 +1,47 @@
+FROM node:20-slim AS builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libssl3 \
+    zlib1g \
+    python3 \
+    make \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+ENV NODE_ENV=production
+
+COPY package*.json ./
+RUN npm ci
+
+COPY tsconfig.json ./
+COPY src ./src
+
+RUN npm run build
+RUN npm prune --omit=dev
+
+FROM node:20-slim AS runner
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libssl3 \
+    zlib1g \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+RUN groupadd --system --gid 1001 worker
+RUN useradd --system --uid 1001 --gid 1001 worker
+
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/package.json ./
+
+RUN mkdir -p /app/data /app/web-data && chown -R worker:worker /app/data /app/web-data
+
+ENV NODE_ENV=production
+ENV TDLIB_DATA_DIR=/app/data/tdlib
+ENV WEB_DB_PATH=/app/web-data/recaptel-web.db
+
+USER worker
+
+CMD ["node", "dist/worker/index.js"]

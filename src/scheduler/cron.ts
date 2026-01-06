@@ -4,6 +4,46 @@ import { runIngest } from "../telegram/tdlib/ingest.js";
 import { runDigest } from "../digest/buildPrompt.js";
 import { sendDigest } from "../telegram/sendDigest.js";
 
+const userLocks = new Map<string, boolean>();
+
+function acquireLock(userId: string): boolean {
+  if (userLocks.get(userId)) {
+    return false;
+  }
+  userLocks.set(userId, true);
+  return true;
+}
+
+function releaseLock(userId: string): void {
+  userLocks.set(userId, false);
+}
+
+async function runIngestWithLock(config: Config, userId: string): Promise<void> {
+  if (!acquireLock(userId)) {
+    console.log(`[${new Date().toISOString()}] Skipping ingest for ${userId} - previous job still running`);
+    return;
+  }
+  try {
+    await runIngest(config, userId);
+  } finally {
+    releaseLock(userId);
+  }
+}
+
+async function runDigestWithLock(config: Config, userId: string): Promise<void> {
+  if (!acquireLock(userId)) {
+    console.log(`[${new Date().toISOString()}] Skipping digest for ${userId} - previous job still running`);
+    return;
+  }
+  try {
+    const digestText = await runDigest(config, userId);
+    await sendDigest(config, digestText);
+    console.log("Digest sent successfully!");
+  } finally {
+    releaseLock(userId);
+  }
+}
+
 export function startScheduler(config: Config, userId: string = "default"): void {
   const digestHour = config.digestHourLocal;
 
@@ -15,7 +55,7 @@ export function startScheduler(config: Config, userId: string = "default"): void
   cron.schedule("*/30 * * * *", async () => {
     console.log(`[${new Date().toISOString()}] Running scheduled ingest...`);
     try {
-      await runIngest(config, userId);
+      await runIngestWithLock(config, userId);
     } catch (err) {
       console.error("Ingest error:", err);
     }
@@ -24,9 +64,7 @@ export function startScheduler(config: Config, userId: string = "default"): void
   cron.schedule(`0 ${digestHour} * * *`, async () => {
     console.log(`[${new Date().toISOString()}] Running scheduled digest...`);
     try {
-      const digestText = await runDigest(config, userId);
-      await sendDigest(config, digestText);
-      console.log("Digest sent successfully!");
+      await runDigestWithLock(config, userId);
     } catch (err) {
       console.error("Digest error:", err);
     }
@@ -35,5 +73,5 @@ export function startScheduler(config: Config, userId: string = "default"): void
   });
 
   console.log("Running initial ingest...\n");
-  runIngest(config, userId).catch((err) => console.error("Initial ingest error:", err));
+  runIngestWithLock(config, userId).catch((err) => console.error("Initial ingest error:", err));
 }

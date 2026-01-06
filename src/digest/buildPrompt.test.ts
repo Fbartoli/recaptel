@@ -29,7 +29,7 @@ function makeConfig(overrides: Partial<Config> = {}): Config {
 }
 
 describe("groupMessagesByChat", () => {
-  it("groups messages by chat title", () => {
+  it("groups messages by chat_id and stores chatTitle", () => {
     const messages = [
       {
         user_id: "default",
@@ -72,13 +72,50 @@ describe("groupMessagesByChat", () => {
     const result = groupMessagesByChat(messages);
 
     expect(Object.keys(result)).toHaveLength(2);
-    expect(result["Work Chat"].messages).toHaveLength(2);
-    expect(result["Friends"].messages).toHaveLength(1);
-    expect(result["Work Chat"].chatId).toBe("chat_1");
-    expect(result["Friends"].chatId).toBe("chat_2");
+    expect(result["chat_1"].messages).toHaveLength(2);
+    expect(result["chat_2"].messages).toHaveLength(1);
+    expect(result["chat_1"].chatTitle).toBe("Work Chat");
+    expect(result["chat_2"].chatTitle).toBe("Friends");
   });
 
-  it("uses chat_id when chat_title is null", () => {
+  it("does not collide chats with same title but different chat_id", () => {
+    const messages = [
+      {
+        user_id: "default",
+        chat_id: "chat_1",
+        message_id: 1,
+        sender_id: "user_1",
+        sender_name: "Alice",
+        text: "Hello from chat 1",
+        has_media: 0,
+        media_type: null,
+        date: 1700000000,
+        chat_title: "Same Title",
+      },
+      {
+        user_id: "default",
+        chat_id: "chat_2",
+        message_id: 1,
+        sender_id: "user_2",
+        sender_name: "Bob",
+        text: "Hello from chat 2",
+        has_media: 0,
+        media_type: null,
+        date: 1700000060,
+        chat_title: "Same Title",
+      },
+    ];
+
+    const result = groupMessagesByChat(messages);
+
+    expect(Object.keys(result)).toHaveLength(2);
+    expect(result["chat_1"].messages).toHaveLength(1);
+    expect(result["chat_2"].messages).toHaveLength(1);
+    expect(result["chat_1"].messages[0].text).toBe("Hello from chat 1");
+    expect(result["chat_2"].messages[0].text).toBe("Hello from chat 2");
+  });
+
+  it("uses chat_id as chatTitle when chat_title is null", () => {
     const messages = [
       {
         user_id: "default",
@@ -97,6 +134,7 @@ describe("groupMessagesByChat", () => {
     const result = groupMessagesByChat(messages);
 
     expect(Object.keys(result)).toContain("chat_1");
+    expect(result["chat_1"].chatTitle).toBe("chat_1");
   });
 
   it("uses Unknown for sender when sender_name is null", () => {
@@ -117,7 +155,7 @@ describe("groupMessagesByChat", () => {
 
     const result = groupMessagesByChat(messages);
 
-    expect(result["Chat"].messages[0].sender).toBe("Unknown");
+    expect(result["chat_1"].messages[0].sender).toBe("Unknown");
   });
 
   it("shows media placeholder when text is null but has_media is true", () => {
@@ -138,7 +176,7 @@ describe("groupMessagesByChat", () => {
 
     const result = groupMessagesByChat(messages);
 
-    expect(result["Chat"].messages[0].text).toBe("[photo]");
+    expect(result["chat_1"].messages[0].text).toBe("[photo]");
   });
 
   it("shows [media] when media_type is null", () => {
@@ -159,7 +197,7 @@ describe("groupMessagesByChat", () => {
 
     const result = groupMessagesByChat(messages);
 
-    expect(result["Chat"].messages[0].text).toBe("[media]");
+    expect(result["chat_1"].messages[0].text).toBe("[media]");
   });
 
   it("shows [empty] when no text and no media", () => {
@@ -180,20 +218,43 @@ describe("groupMessagesByChat", () => {
 
     const result = groupMessagesByChat(messages);
 
-    expect(result["Chat"].messages[0].text).toBe("[empty]");
+    expect(result["chat_1"].messages[0].text).toBe("[empty]");
   });
 
   it("returns empty object for empty message array", () => {
     const result = groupMessagesByChat([]);
     expect(result).toEqual({});
   });
+
+  it("formats times using the provided timezone", () => {
+    const messages = [
+      {
+        user_id: "default",
+        chat_id: "chat_1",
+        message_id: 1,
+        sender_id: "user_1",
+        sender_name: "Alice",
+        text: "Hello",
+        has_media: 0,
+        media_type: null,
+        date: 1700000000,
+        chat_title: "Chat",
+      },
+    ];
+
+    const resultUTC = groupMessagesByChat(messages, "UTC");
+    const resultNY = groupMessagesByChat(messages, "America/New_York");
+
+    expect(resultUTC["chat_1"].messages[0].time).toBe("22:13");
+    expect(resultNY["chat_1"].messages[0].time).toBe("17:13");
+  });
 });
 
 describe("buildPromptContent", () => {
-  it("builds prompt with date and chat sections", () => {
+  it("builds prompt with date and chat sections using chatTitle", () => {
     const grouped: GroupedMessages = {
-      "Work Chat": {
-        chatId: "chat_1",
+      "chat_1": {
+        chatTitle: "Work Chat",
         messages: [
           { sender: "Alice", text: "Hello", time: "09:00" },
           { sender: "Bob", text: "Hi there", time: "09:01" },
@@ -221,8 +282,8 @@ describe("buildPromptContent", () => {
   it("truncates long messages to 500 characters", () => {
     const longText = "a".repeat(600);
     const grouped: GroupedMessages = {
-      Chat: {
-        chatId: "chat_1",
+      "chat_1": {
+        chatTitle: "Chat",
         messages: [{ sender: "Alice", text: longText, time: "09:00" }],
       },
     };
@@ -235,12 +296,12 @@ describe("buildPromptContent", () => {
 
   it("handles multiple chats", () => {
     const grouped: GroupedMessages = {
-      "Chat 1": {
-        chatId: "chat_1",
+      "chat_1": {
+        chatTitle: "Chat 1",
         messages: [{ sender: "Alice", text: "Hello", time: "09:00" }],
       },
-      "Chat 2": {
-        chatId: "chat_2",
+      "chat_2": {
+        chatTitle: "Chat 2",
         messages: [{ sender: "Bob", text: "World", time: "10:00" }],
       },
     };

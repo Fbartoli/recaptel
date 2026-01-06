@@ -139,88 +139,100 @@ export async function runIngest(config: Config, userId: string, options: IngestO
 
   const db = dryRun ? null : initDb(config.dbPath);
 
-  if (db) {
-    upsertUser(db, { id: userId, phone: null, display_name: null });
-  }
-
-  console.log("Fetching chats...\n");
-
-  const chatIds = await fetchChats(wrapper, config.ingestDialogLimit);
-
-  let totalNewMessages = 0;
-
-  for (const chatId of chatIds) {
-    const chatIdStr = String(chatId);
-
-    if (!shouldIncludeChat(chatIdStr, config)) {
-      continue;
+  try {
+    if (db) {
+      upsertUser(db, { id: userId, phone: null, display_name: null });
     }
 
-    const { title, type } = await getChatInfo(wrapper, chatId);
+    console.log("Fetching chats...\n");
 
-    if (dryRun) {
-      console.log(`[${type}] ${title} (${chatIdStr})`);
-      continue;
-    }
+    const chatIds = await fetchChats(wrapper, config.ingestDialogLimit);
 
-    upsertChat(db!, { user_id: userId, chat_id: chatIdStr, title, type });
+    let totalNewMessages = 0;
 
-    const cursor = getCursor(db!, userId, chatIdStr) ?? 0;
+    for (const chatId of chatIds) {
+      const chatIdStr = String(chatId);
 
-    let fromMessageId = 0;
-    let newCount = 0;
-    let maxMessageId = cursor;
-    let fetchedTotal = 0;
-
-    while (fetchedTotal < config.ingestMessagesPerChat) {
-      const batchSize = Math.min(100, config.ingestMessagesPerChat - fetchedTotal);
-      const messages = await fetchMessages(wrapper, chatId, fromMessageId, batchSize);
-
-      if (messages.length === 0) break;
-
-      for (const msg of messages) {
-        if (msg.id <= cursor) continue;
-
-        const senderId = extractSenderName(msg.sender_id);
-        const text = extractMessageText(msg.content);
-        const { hasMedia, mediaType } = extractMediaType(msg.content);
-
-        const inserted = insertMessage(db!, {
-          user_id: userId,
-          chat_id: chatIdStr,
-          message_id: msg.id,
-          sender_id: senderId,
-          sender_name: senderId,
-          text,
-          has_media: hasMedia ? 1 : 0,
-          media_type: mediaType,
-          date: msg.date,
-        });
-
-        if (inserted) newCount++;
-        if (msg.id > maxMessageId) maxMessageId = msg.id;
+      if (!shouldIncludeChat(chatIdStr, config)) {
+        continue;
       }
 
-      fromMessageId = messages[messages.length - 1].id;
-      fetchedTotal += messages.length;
+      const { title, type } = await getChatInfo(wrapper, chatId);
 
-      if (messages.length < batchSize) break;
+      if (dryRun) {
+        console.log(`[${type}] ${title} (${chatIdStr})`);
+        continue;
+      }
+
+      upsertChat(db!, { user_id: userId, chat_id: chatIdStr, title, type });
+
+      const cursor = getCursor(db!, userId, chatIdStr) ?? 0;
+
+      let fromMessageId = 0;
+      let newCount = 0;
+      let maxMessageId = cursor;
+      let fetchedTotal = 0;
+
+      while (fetchedTotal < config.ingestMessagesPerChat) {
+        const batchSize = Math.min(100, config.ingestMessagesPerChat - fetchedTotal);
+        const messages = await fetchMessages(wrapper, chatId, fromMessageId, batchSize);
+
+        if (messages.length === 0) break;
+
+        let reachedCursor = false;
+        for (const msg of messages) {
+          if (msg.id <= cursor) {
+            reachedCursor = true;
+            continue;
+          }
+
+          const senderId = extractSenderName(msg.sender_id);
+          const text = extractMessageText(msg.content);
+          const { hasMedia, mediaType } = extractMediaType(msg.content);
+
+          const inserted = insertMessage(db!, {
+            user_id: userId,
+            chat_id: chatIdStr,
+            message_id: msg.id,
+            sender_id: senderId,
+            sender_name: senderId,
+            text,
+            has_media: hasMedia ? 1 : 0,
+            media_type: mediaType,
+            date: msg.date,
+          });
+
+          if (inserted) newCount++;
+          if (msg.id > maxMessageId) maxMessageId = msg.id;
+        }
+
+        if (reachedCursor) break;
+
+        fromMessageId = messages[messages.length - 1].id;
+        fetchedTotal += messages.length;
+
+        if (messages.length < batchSize) break;
+      }
+
+      if (maxMessageId > cursor) {
+        setCursor(db!, userId, chatIdStr, maxMessageId);
+      }
+
+      if (newCount > 0) {
+        console.log(`[${type}] ${title}: +${newCount} new messages`);
+        totalNewMessages += newCount;
+      }
     }
 
-    if (maxMessageId > cursor) {
-      setCursor(db!, userId, chatIdStr, maxMessageId);
+    if (dryRun) {
+      console.log(`\nDry run complete. Found ${chatIds.length} chats.`);
+    } else {
+      console.log(`\nIngest complete. ${totalNewMessages} new messages stored.`);
     }
-
-    if (newCount > 0) {
-      console.log(`[${type}] ${title}: +${newCount} new messages`);
-      totalNewMessages += newCount;
+  } finally {
+    if (db) {
+      db.close();
     }
-  }
-
-  if (dryRun) {
-    console.log(`\nDry run complete. Found ${chatIds.length} chats.`);
-  } else {
-    console.log(`\nIngest complete. ${totalNewMessages} new messages stored.`);
   }
 }
 

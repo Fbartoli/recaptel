@@ -1,11 +1,17 @@
 import type { Config } from "../config.js";
 import { fetchWithRetry } from "../utils/fetchRetry.js";
 
+const MARKDOWNV2_SPECIAL_CHARS = /([_*\[\]()~`>#+\-=|{}.!\\])/g;
+
+export function escapeMarkdownV2(text: string): string {
+  return text.replace(MARKDOWNV2_SPECIAL_CHARS, "\\$1");
+}
+
 async function sendTelegramMessage(
   botToken: string,
   chatId: string,
   text: string,
-  parseMode?: "Markdown" | "HTML"
+  parseMode?: "MarkdownV2"
 ): Promise<void> {
   const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
 
@@ -64,14 +70,11 @@ export function splitMessage(text: string, maxLength: number = 4000): string[] {
 }
 
 async function sendWithFallback(botToken: string, chatId: string, text: string): Promise<void> {
+  const escapedText = escapeMarkdownV2(text);
   try {
-    await sendTelegramMessage(botToken, chatId, text, "Markdown");
+    await sendTelegramMessage(botToken, chatId, escapedText, "MarkdownV2");
   } catch {
-    try {
-      await sendTelegramMessage(botToken, chatId, text, "HTML");
-    } catch {
-      await sendTelegramMessage(botToken, chatId, text);
-    }
+    await sendTelegramMessage(botToken, chatId, text);
   }
 }
 
@@ -90,9 +93,10 @@ export async function sendDigest(config: Config, digestText: string): Promise<vo
 }
 
 export async function sendTestMessage(config: Config): Promise<void> {
-  const testMessage = `🧪 *RecapTel Test*\n\nIf you see this, your bot configuration is working correctly!\n\n_Sent at: ${new Date().toISOString()}_`;
+  const timestamp = escapeMarkdownV2(new Date().toISOString());
+  const testMessage = `🧪 *RecapTel Test*\n\nIf you see this, your bot configuration is working correctly\\!\n\n_Sent at: ${timestamp}_`;
 
-  await sendTelegramMessage(config.telegramBotToken, config.telegramDigestChatId, testMessage);
+  await sendTelegramMessage(config.telegramBotToken, config.telegramDigestChatId, testMessage, "MarkdownV2");
 }
 
 

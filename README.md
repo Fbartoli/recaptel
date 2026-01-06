@@ -224,7 +224,33 @@ If you prefer cron instead of the built-in scheduler:
 0 9 * * * cd /path/to/recaptel && node dist/index.js digest >> /var/log/recaptel.log 2>&1
 ```
 
-### Using Docker
+### Using Docker Compose (Recommended)
+
+The recommended way to run RecapTel is with Docker Compose, which runs all services:
+
+```bash
+# Create .env file with required secrets
+cp .env.example .env
+# Edit .env with your credentials
+
+# Start all services
+docker compose up -d
+
+# Check service health
+docker compose ps
+
+# View logs
+docker compose logs -f
+```
+
+Services:
+- **web**: Next.js web UI for user registration and Telegram connection
+- **worker**: Background worker for message ingestion and digest generation
+- **redis**: Message queue and pub/sub for service communication
+
+Access the web UI at http://localhost:3000
+
+### Using Docker (Standalone Worker)
 
 ```bash
 docker build -t recaptel .
@@ -237,6 +263,60 @@ docker run -d --name recaptel \
 The Docker image includes prebuilt TDLib binaries. The `/app/data` volume persists:
 - SQLite database (`recaptel.db`)
 - TDLib session data (`tdlib/<userId>/`)
+
+## Monitoring
+
+### Quick Status Check
+
+```bash
+# Check service health
+docker compose ps
+
+# Check Redis is healthy
+docker compose exec redis redis-cli ping
+
+# View queue status
+docker compose exec redis redis-cli KEYS 'bull:*'
+```
+
+### Check Database Counts
+
+```bash
+# From web container
+docker compose exec web node -e "
+const db = require('better-sqlite3')('/app/data/recaptel-web.db');
+console.log('Users:', db.prepare('SELECT COUNT(*) as count FROM users WHERE telegram_auth_state = \"ready\"').get());
+console.log('Messages:', db.prepare('SELECT COUNT(*) as count FROM messages').get());
+console.log('Chats:', db.prepare('SELECT COUNT(*) as count FROM chats').get());
+console.log('Digests:', db.prepare('SELECT COUNT(*) as count FROM digests').get());
+"
+```
+
+### Watch Ingest/Digest Activity
+
+```bash
+# Stream worker logs
+docker compose logs -f worker
+
+# Filter for ingest activity
+docker compose logs -f worker 2>&1 | grep -E "(Ingest|ingest|messages)"
+
+# Filter for digest activity
+docker compose logs -f worker 2>&1 | grep -E "(Digest|digest)"
+```
+
+### BullMQ Queue Inspection
+
+```bash
+# Pending ingest jobs
+docker compose exec redis redis-cli LLEN bull:recaptel-ingest:wait
+
+# Failed jobs
+docker compose exec redis redis-cli LLEN bull:recaptel-ingest:failed
+
+# Completed jobs
+docker compose exec redis redis-cli LLEN bull:recaptel-ingest:completed
+```
 
 ## Privacy & Security
 
