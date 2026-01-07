@@ -110,3 +110,4 @@ CREATE TABLE IF NOT EXISTS digests (
 CREATE INDEX IF NOT EXISTS digests_user_idx ON digests(user_id);
 CREATE UNIQUE INDEX IF NOT EXISTS digests_user_date_idx ON digests(user_id, digest_date);
 
+

@@ -78,3 +78,4 @@ export function DigestCard({ digestDate, content, messageCount }: DigestCardProp
   );
 }
 
+

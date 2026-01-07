@@ -52,3 +52,4 @@ echo ""
 echo "Restore complete!"
 echo "Run 'docker compose up -d' to start services."
 
+

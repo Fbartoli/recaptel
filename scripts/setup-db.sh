@@ -86,3 +86,4 @@ echo "Database schema applied via SQL!"
 echo ""
 echo "You can now login at http://localhost:3000/login"
 
+

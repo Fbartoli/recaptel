@@ -22,3 +22,4 @@ export function getTelegramApiHash(): string | undefined {
   return readSecret("telegram_api_hash", process.env.TELEGRAM_API_HASH);
 }
 
+
